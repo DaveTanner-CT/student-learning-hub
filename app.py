@@ -7,7 +7,7 @@ from langchain_google_genai import GoogleGenerativeAIEmbeddings
 from langchain_google_genai import ChatGoogleGenerativeAI
 
 # --- CONFIGURATION ---
-st.set_page_config(page_title="AI Learning Companion", layout="wide")
+st.set_page_config(page_title="AI Learning Hub", layout="wide")
 
 # --- CSS STYLING ---
 st.markdown("""
@@ -53,7 +53,7 @@ with st.sidebar:
     else:
         st.success("Authentication: ✅ Connected securely")
     
-    pdf_docs = st.file_uploader("Upload Course Material (PDF)", accept_multiple_files=True)
+    pdf_docs = st.file_uploader("Upload PDF", accept_multiple_files=True)
     
     if st.button("Process Material"):
         if not api_key:
@@ -61,7 +61,7 @@ with st.sidebar:
         elif not pdf_docs:
             st.error("Please upload a PDF.")
         else:
-            with st.spinner("Processing content..."):
+            with st.spinner("Processing..."):
                 try:
                     raw_text = ""
                     for pdf in pdf_docs:
@@ -74,13 +74,12 @@ with st.sidebar:
                     text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
                     text_chunks = text_splitter.split_text(raw_text)
                     
-                    # Embedding Model (This one was working fine)
                     embeddings = GoogleGenerativeAIEmbeddings(model="models/text-embedding-004", google_api_key=api_key)
                     vectorstore = FAISS.from_texts(texts=text_chunks, embedding=embeddings)
                     st.session_state.vector_store = vectorstore
-                    st.success("Material Loaded! Gemini is ready.")
+                    st.success("Gemini is ready!")
                 except Exception as e:
-                    st.error(f"Error processing material: {e}")
+                    st.error(f"Error: {e}")
 
 # --- SYSTEM PROMPTS ---
 def get_system_prompt(mode):
@@ -97,7 +96,7 @@ def get_system_prompt(mode):
 st.title("🎓 Student Learning Hub")
 
 if st.session_state.vector_store is None:
-    st.info("👋 Hello! Please ask your teacher to upload the lesson material in the sidebar to begin.")
+    st.info("👋 Please ask your teacher to upload the lesson material in the sidebar.")
 else:
     # Button Grid
     col1, col2, col3, col4, col5 = st.columns(5)
@@ -108,8 +107,7 @@ else:
     if col5.button("🗣️ Vocab"): st.session_state.mode = "Vocabulary Builder"
 
     # Display Current Mode
-    mode_display = f"**Current Mode: `{st.session_state.mode}`**"
-    st.markdown(mode_display)
+    st.markdown(f"**Current Mode: `{st.session_state.mode}`**")
 
     # Chat History
     for message in st.session_state.chat_history:
@@ -125,7 +123,7 @@ else:
             with st.chat_message("user"):
                 st.write(user_input)
 
-            with st.spinner("Gemini is thinking..."):
+            with st.spinner("Thinking..."):
                 try:
                     docs = st.session_state.vector_store.similarity_search(user_input, k=3)
                     context_text = "\n".join([doc.page_content for doc in docs])
@@ -133,12 +131,8 @@ else:
                     
                     full_prompt = f"System: {persona}\nContext: {context_text}\nUser: {user_input}"
                     
-                    # UPDATED: Using "gemini-pro" (The most stable alias)
+                    # Using 'gemini-pro' - the most compatible model alias
                     llm = ChatGoogleGenerativeAI(model="gemini-pro", google_api_key=api_key)
                     response = llm.invoke(full_prompt)
                     
-                    st.session_state.chat_history.append({"role": "assistant", "content": response.content})
-                    with st.chat_message("assistant"):
-                        st.write(response.content)
-                except Exception as e:
-                    st.error(f"Error
+                    st.session_state.chat_history
