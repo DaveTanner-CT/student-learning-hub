@@ -65,7 +65,7 @@ def get_working_model_name(key):
         pass
     return "gemini-pro"
 
-# --- SYSTEM PROMPTS ---
+# --- SYSTEM PROMPTS (UPDATED QUIZ LOGIC) ---
 def get_system_prompt(mode):
     if mode == "Explain":
         return (
@@ -78,11 +78,13 @@ def get_system_prompt(mode):
     
     elif mode == "QuizMe":
         return (
-            "You are an adaptive Quiz Master.\n"
+            "You are a fast-paced Quiz Master. Keep the flow moving.\n"
             "RULES:\n"
-            "1. Ask a multiple-choice or open-ended question based on the text.\n"
-            "2. If CORRECT: Confirm it, explain why briefly, and IMMEDIATELY ask the NEXT question.\n"
-            "3. If INCORRECT: Identify the misconception, give a hint, and ask them to try again."
+            "1. If the user just started, ask the first question immediately.\n"
+            "2. If the user answered a question:\n"
+            "   - Start with 'Correct!' or 'Incorrect.' (Do NOT say 'Let's begin' or 'Great start').\n"
+            "   - Briefly explain the answer.\n"
+            "   - Immediately say 'Next Question:' and ask the new question."
         )
     
     elif mode == "FixMyWork":
@@ -215,7 +217,7 @@ else:
         start_automated_interaction("Explain", "Start by explaining the most important concept in this text, then check if I understand.")
     
     if col2.button("❓ QuizMe"):
-        start_automated_interaction("QuizMe", "Ask me the first multiple-choice question about this text.")
+        start_automated_interaction("QuizMe", "Ask me the first multiple-choice question.")
         
     if col3.button("🔧 Fix"):
         start_automated_interaction("FixMyWork", "Introduce yourself as a coach and ask me to paste a paragraph for review.")
@@ -272,7 +274,6 @@ else:
                     valid_model = get_working_model_name(api_key)
                     llm = ChatGoogleGenerativeAI(model=valid_model, google_api_key=api_key)
                     
-                    # UPDATED: Student-Facing Prompt
                     report_prompt = (
                         "You are a supportive, encouraging learning coach. "
                         "Analyze the chat history below and write a feedback report DIRECTLY TO THE STUDENT.\n"
