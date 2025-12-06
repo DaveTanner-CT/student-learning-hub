@@ -1,0 +1,6 @@
+streamlit
+pypdf
+langchain-text-splitters
+langchain-community
+faiss-cpu
+langchain-google-genai
