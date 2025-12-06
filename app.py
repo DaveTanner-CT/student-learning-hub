@@ -3,21 +3,20 @@ import os
 from PyPDF2 import PdfReader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_community.vectorstores import FAISS
-# UPDATED: Importing Google Gemini Libraries
 from langchain_google_genai import GoogleGenerativeAIEmbeddings
 from langchain_google_genai import ChatGoogleGenerativeAI
 
-# --- CONFIGURATION & PAGE SETUP ---
-st.set_page_config(page_title="AI Learning Companion (Gemini)", layout="wide")
+# --- CONFIGURATION ---
+st.set_page_config(page_title="AI Learning Companion", layout="wide")
 
-# --- CUSTOM CSS ---
+# --- CSS STYLING ---
 st.markdown("""
 <style>
     .stButton>button {
         width: 100%;
-        border-radius: 10px;
         height: 3em;
         font-weight: bold;
+        border-radius: 10px;
     }
     .report-box {
         background-color: #f0f2f6;
@@ -28,7 +27,7 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# --- SESSION STATE INITIALIZATION ---
+# --- SESSION STATE ---
 if "chat_history" not in st.session_state:
     st.session_state.chat_history = []
 if "mode" not in st.session_state:
@@ -36,19 +35,17 @@ if "mode" not in st.session_state:
 if "vector_store" not in st.session_state:
     st.session_state.vector_store = None
 
-# --- SIDEBAR: TEACHER/ADMIN PORTAL ---
+# --- SIDEBAR ---
 with st.sidebar:
     st.header("Teacher/Admin Portal")
     st.write("Powered by **Google Gemini**")
     
-    # 1. User enters Google API Key here
     api_key = st.text_input("Enter Google API Key", type="password")
-    
     pdf_docs = st.file_uploader("Upload Course Material (PDF)", accept_multiple_files=True)
     
     if st.button("Process Material"):
         if not api_key:
-            st.error("Please add your Google API Key first.")
+            st.error("Please add your Google API Key.")
         elif not pdf_docs:
             st.error("Please upload a PDF.")
         else:
@@ -64,13 +61,12 @@ with st.sidebar:
                 text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
                 text_chunks = text_splitter.split_text(raw_text)
                 
-                # 2. Uses Google Embeddings
                 embeddings = GoogleGenerativeAIEmbeddings(model="models/embedding-001", google_api_key=api_key)
                 vectorstore = FAISS.from_texts(texts=text_chunks, embedding=embeddings)
                 st.session_state.vector_store = vectorstore
                 st.success("Material Loaded! Gemini is ready.")
 
-# --- HELPER: SYSTEM PROMPTS ---
+# --- SYSTEM PROMPTS ---
 def get_system_prompt(mode):
     prompts = {
         "Explain": "You are an expert tutor. Explain the concept simply. End with a check for understanding question.",
@@ -81,13 +77,13 @@ def get_system_prompt(mode):
     }
     return prompts.get(mode, "You are a helpful AI assistant.")
 
-# --- MAIN INTERFACE ---
-st.title("🎓 Student Learning Hub (Gemini Edition)")
+# --- MAIN APP ---
+st.title("🎓 Student Learning Hub")
 
 if st.session_state.vector_store is None:
     st.info("👋 Hello! Please ask your teacher to upload the lesson material in the sidebar to begin.")
 else:
-    # Button Row
+    # Button Grid
     col1, col2, col3, col4, col5 = st.columns(5)
     if col1.button("📖 Explain"): st.session_state.mode = "Explain"
     if col2.button("❓ QuizMe"): st.session_state.mode = "QuizMe"
@@ -95,4 +91,47 @@ else:
     if col4.button("🤔 Socratic"): st.session_state.mode = "SocraticDialogue"
     if col5.button("🗣️ Vocab"): st.session_state.mode = "Vocabulary Builder"
 
-    st.markdown(f"**Current Mode:
+    # Display Current Mode
+    mode_display = f"**Current Mode: `{st.session_state.mode}`**"
+    st.markdown(mode_display)
+
+    # Chat History
+    for message in st.session_state.chat_history:
+        with st.chat_message(message["role"]):
+            st.write(message["content"])
+
+    # User Input
+    if user_input := st.chat_input("Type your response here..."):
+        if not api_key:
+            st.error("Teacher must enter API Key in sidebar.")
+        else:
+            st.session_state.chat_history.append({"role": "user", "content": user_input})
+            with st.chat_message("user"):
+                st.write(user_input)
+
+            with st.spinner("Gemini is thinking..."):
+                docs = st.session_state.vector_store.similarity_search(user_input, k=3)
+                context_text = "\n".join([doc.page_content for doc in docs])
+                persona = get_system_prompt(st.session_state.mode)
+                
+                full_prompt = f"System: {persona}\nContext: {context_text}\nUser: {user_input}"
+                
+                llm = ChatGoogleGenerativeAI(model="gemini-1.5-flash", google_api_key=api_key)
+                response = llm.invoke(full_prompt)
+                
+                st.session_state.chat_history.append({"role": "assistant", "content": response.content})
+                with st.chat_message("assistant"):
+                    st.write(response.content)
+
+    # Reporting Section
+    st.markdown("---")
+    if st.button("📊 Generate Insight Report"):
+        if st.session_state.chat_history:
+            with st.spinner("Analyzing..."):
+                llm = ChatGoogleGenerativeAI(model="gemini-1.5-flash", google_api_key=api_key)
+                report_prompt = f"Analyze this chat history for student growth/misconceptions: {st.session_state.chat_history}"
+                report = llm.invoke(report_prompt)
+                
+                st.markdown("<div class='report-box'>", unsafe_allow_html=True)
+                st.write(report.content)
+                st.markdown("</div>", unsafe_allow_html=True)
