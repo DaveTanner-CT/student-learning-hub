@@ -1,14 +1,14 @@
 import streamlit as st
 import os
 from PyPDF2 import PdfReader
-# We use the specific libraries you just installed to avoid path errors
 from langchain_text_splitters import RecursiveCharacterTextSplitter
-from langchain_openai import OpenAIEmbeddings
 from langchain_community.vectorstores import FAISS
-from langchain_openai import ChatOpenAI
+# UPDATED: Importing Google Gemini Libraries
+from langchain_google_genai import GoogleGenerativeAIEmbeddings
+from langchain_google_genai import ChatGoogleGenerativeAI
 
 # --- CONFIGURATION & PAGE SETUP ---
-st.set_page_config(page_title="AI Learning Companion", layout="wide")
+st.set_page_config(page_title="AI Learning Companion (Gemini)", layout="wide")
 
 # --- CUSTOM CSS ---
 st.markdown("""
@@ -39,14 +39,16 @@ if "vector_store" not in st.session_state:
 # --- SIDEBAR: TEACHER/ADMIN PORTAL ---
 with st.sidebar:
     st.header("Teacher/Admin Portal")
-    st.write("Upload course material to ground the AI's responses.")
+    st.write("Powered by **Google Gemini**")
     
-    api_key = st.text_input("Enter OpenAI API Key", type="password")
+    # 1. User enters Google API Key here
+    api_key = st.text_input("Enter Google API Key", type="password")
+    
     pdf_docs = st.file_uploader("Upload Course Material (PDF)", accept_multiple_files=True)
     
     if st.button("Process Material"):
         if not api_key:
-            st.error("Please add your API Key first.")
+            st.error("Please add your Google API Key first.")
         elif not pdf_docs:
             st.error("Please upload a PDF.")
         else:
@@ -59,14 +61,14 @@ with st.sidebar:
                         if text:
                             raw_text += text
                 
-                # Using the modern text splitter import
                 text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
                 text_chunks = text_splitter.split_text(raw_text)
                 
-                embeddings = OpenAIEmbeddings(openai_api_key=api_key)
+                # 2. Uses Google Embeddings
+                embeddings = GoogleGenerativeAIEmbeddings(model="models/embedding-001", google_api_key=api_key)
                 vectorstore = FAISS.from_texts(texts=text_chunks, embedding=embeddings)
                 st.session_state.vector_store = vectorstore
-                st.success("Material Loaded!")
+                st.success("Material Loaded! Gemini is ready.")
 
 # --- HELPER: SYSTEM PROMPTS ---
 def get_system_prompt(mode):
@@ -80,7 +82,7 @@ def get_system_prompt(mode):
     return prompts.get(mode, "You are a helpful AI assistant.")
 
 # --- MAIN INTERFACE ---
-st.title("🎓 Student Learning Hub")
+st.title("🎓 Student Learning Hub (Gemini Edition)")
 
 if st.session_state.vector_store is None:
     st.info("👋 Hello! Please ask your teacher to upload the lesson material in the sidebar to begin.")
@@ -93,43 +95,4 @@ else:
     if col4.button("🤔 Socratic"): st.session_state.mode = "SocraticDialogue"
     if col5.button("🗣️ Vocab"): st.session_state.mode = "Vocabulary Builder"
 
-    st.markdown(f"**Current Mode: `{st.session_state.mode}`**")
-
-    # Chat Display
-    for message in st.session_state.chat_history:
-        with st.chat_message(message["role"]):
-            st.write(message["content"])
-
-    # User Input
-    if user_input := st.chat_input("Type your response here..."):
-        if not api_key:
-            st.error("Teacher must enter API Key in sidebar.")
-        else:
-            st.session_state.chat_history.append({"role": "user", "content": user_input})
-            with st.chat_message("user"):
-                st.write(user_input)
-
-            with st.spinner("Thinking..."):
-                docs = st.session_state.vector_store.similarity_search(user_input, k=3)
-                context_text = "\n".join([doc.page_content for doc in docs])
-                persona = get_system_prompt(st.session_state.mode)
-                
-                full_prompt = f"System: {persona}\nContext: {context_text}\nUser: {user_input}"
-                
-                llm = ChatOpenAI(openai_api_key=api_key, model_name="gpt-4")
-                response = llm.invoke(full_prompt)
-                
-                st.session_state.chat_history.append({"role": "assistant", "content": response.content})
-                with st.chat_message("assistant"):
-                    st.write(response.content)
-
-    # Reporting
-    st.markdown("---")
-    if st.button("📊 Generate Insight Report"):
-        if st.session_state.chat_history:
-            with st.spinner("Analyzing..."):
-                llm = ChatOpenAI(openai_api_key=api_key, model_name="gpt-4")
-                report = llm.invoke(f"Analyze this chat history for student growth/misconceptions: {st.session_state.chat_history}")
-                st.markdown("<div class='report-box'>", unsafe_allow_html=True)
-                st.write(report.content)
-                st.markdown("</div>", unsafe_allow_html=True)
+    st.markdown(f"**Current Mode:
