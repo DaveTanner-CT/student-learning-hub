@@ -74,13 +74,13 @@ with st.sidebar:
                     text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
                     text_chunks = text_splitter.split_text(raw_text)
                     
-                    # Embedding Model
+                    # Embedding Model (This one was working fine)
                     embeddings = GoogleGenerativeAIEmbeddings(model="models/text-embedding-004", google_api_key=api_key)
                     vectorstore = FAISS.from_texts(texts=text_chunks, embedding=embeddings)
                     st.session_state.vector_store = vectorstore
                     st.success("Material Loaded! Gemini is ready.")
                 except Exception as e:
-                    st.error(f"Error: {e}")
+                    st.error(f"Error processing material: {e}")
 
 # --- SYSTEM PROMPTS ---
 def get_system_prompt(mode):
@@ -133,26 +133,12 @@ else:
                     
                     full_prompt = f"System: {persona}\nContext: {context_text}\nUser: {user_input}"
                     
-                    # UPDATED: Using "gemini-1.5-pro" which is the most stable identifier
-                    llm = ChatGoogleGenerativeAI(model="gemini-1.5-pro", google_api_key=api_key)
+                    # UPDATED: Using "gemini-pro" (The most stable alias)
+                    llm = ChatGoogleGenerativeAI(model="gemini-pro", google_api_key=api_key)
                     response = llm.invoke(full_prompt)
                     
                     st.session_state.chat_history.append({"role": "assistant", "content": response.content})
                     with st.chat_message("assistant"):
                         st.write(response.content)
                 except Exception as e:
-                    st.error(f"Error generating response: {e}")
-
-    # Reporting Section
-    st.markdown("---")
-    if st.button("📊 Generate Insight Report"):
-        if st.session_state.chat_history:
-            with st.spinner("Analyzing..."):
-                # UPDATED: Using "gemini-1.5-pro"
-                llm = ChatGoogleGenerativeAI(model="gemini-1.5-pro", google_api_key=api_key)
-                report_prompt = f"Analyze this chat history for student growth/misconceptions: {st.session_state.chat_history}"
-                report = llm.invoke(report_prompt)
-                
-                st.markdown("<div class='report-box'>", unsafe_allow_html=True)
-                st.write(report.content)
-                st.markdown("</div>", unsafe_allow_html=True)
+                    st.error(f"Error
