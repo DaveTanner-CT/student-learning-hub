@@ -1,4 +1,5 @@
 import streamlit as st
+import os
 from PyPDF2 import PdfReader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_community.vectorstores import FAISS
@@ -17,12 +18,18 @@ st.markdown("""
         height: 3em;
         font-weight: bold;
         border-radius: 10px;
+        background-color: #f0f2f6;
     }
     .report-box {
         background-color: #f0f2f6;
         padding: 20px;
         border-radius: 10px;
         border-left: 5px solid #4CAF50;
+    }
+    .instruction-text {
+        font-size: 1.1em;
+        color: #555;
+        margin-bottom: 20px;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -45,75 +52,121 @@ else:
 
 # --- HELPER: FIND WORKING MODEL ---
 def get_working_model_name(key):
-    """Asks Google which models are actually available to avoid 404s"""
     try:
         genai.configure(api_key=key)
-        # Look for the new Flash model first
         for m in genai.list_models():
             if 'generateContent' in m.supported_generation_methods:
-                if 'gemini-1.5-flash' in m.name:
-                    return m.name
-        # Fallback to Pro
+                if 'gemini-1.5-flash' in m.name: return m.name
         for m in genai.list_models():
             if 'generateContent' in m.supported_generation_methods:
-                if 'gemini-pro' in m.name:
-                    return m.name
+                if 'gemini-pro' in m.name: return m.name
     except:
         pass
-    # Absolute fallback if search fails
-    return "gemini-1.5-flash"
+    return "gemini-pro"
 
-# --- SIDEBAR ---
+# --- HELPER: START INTERACTION AUTOMATICALLY ---
+def start_automated_interaction(mode_name, initial_prompt):
+    st.session_state.mode = mode_name
+    
+    # Check if we already have context loaded
+    if st.session_state.vector_store is None:
+        st.warning("Please wait for the class material to load first.")
+        return
+
+    # Add a marker so the user knows mode changed
+    st.session_state.chat_history.append({"role": "user", "content": f"**[Mode Selected: {mode_name}]**"})
+
+    with st.spinner(f"{mode_name} is starting..."):
+        try:
+            # Generate the first AI response automatically
+            # We search for 'general context' to ground the start
+            docs = st.session_state.vector_store.similarity_search("Main concept summary", k=3)
+            context_text = "\n".join([doc.page_content for doc in docs])
+            
+            full_prompt = (
+                f"System: {get_system_prompt(mode_name)}\n"
+                f"Context: {context_text}\n"
+                f"Instruction: {initial_prompt}"
+            )
+            
+            valid_model = get_working_model_name(api_key)
+            llm = ChatGoogleGenerativeAI(model=valid_model, google_api_key=api_key)
+            response = llm.invoke(full_prompt)
+            
+            st.session_state.chat_history.append({"role": "assistant", "content": response.content})
+            st.rerun()
+            
+        except Exception as e:
+            st.error(f"Error starting interaction: {e}")
+
+# --- HELPER: PDF PROCESSING ---
+def process_pdf(files):
+    raw_text = ""
+    for pdf in files:
+        pdf_reader = PdfReader(pdf)
+        for page in pdf_reader.pages:
+            text = page.extract_text()
+            if text:
+                raw_text += text
+    
+    text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
+    text_chunks = text_splitter.split_text(raw_text)
+    
+    embeddings = GoogleGenerativeAIEmbeddings(model="models/text-embedding-004", google_api_key=api_key)
+    vectorstore = FAISS.from_texts(texts=text_chunks, embedding=embeddings)
+    st.session_state.vector_store = vectorstore
+
+# --- SIDEBAR & PRELOAD LOGIC ---
 with st.sidebar:
-    st.header("Teacher Portal")
-    st.write("Powered by **Google Gemini**")
+    st.header("Classroom Portal")
     
     if not has_key:
         api_key = st.text_input("Enter Google API Key", type="password")
-    else:
-        st.success("Authentication: Connected")
     
-    pdf_docs = st.file_uploader("Upload PDF", accept_multiple_files=True)
-    
-    if st.button("Process Material"):
-        if not api_key:
-            st.error("Missing API Key.")
-        elif not pdf_docs:
-            st.error("Please upload a PDF.")
-        else:
-            with st.spinner("Processing..."):
+    # 1. CHECK FOR PRELOADED FILE (TEACHER MODE)
+    preloaded_file_path = "lesson.pdf"
+    is_preloaded = os.path.exists(preloaded_file_path)
+
+    if is_preloaded:
+        st.success(f"📚 Class Material: '{preloaded_file_path}' Loaded")
+        # Auto-process if not done yet
+        if st.session_state.vector_store is None and api_key:
+            with st.spinner("Initializing Class Material..."):
                 try:
-                    raw_text = ""
-                    for pdf in pdf_docs:
-                        pdf_reader = PdfReader(pdf)
-                        for page in pdf_reader.pages:
-                            text = page.extract_text()
-                            if text:
-                                raw_text += text
-                    
-                    text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
-                    text_chunks = text_splitter.split_text(raw_text)
-                    
-                    # Embeddings usually prefer the 'models/' prefix
-                    embeddings = GoogleGenerativeAIEmbeddings(model="models/text-embedding-004", google_api_key=api_key)
-                    vectorstore = FAISS.from_texts(texts=text_chunks, embedding=embeddings)
-                    st.session_state.vector_store = vectorstore
-                    st.success("Gemini is ready!")
+                    with open(preloaded_file_path, "rb") as f:
+                        process_pdf([f])
+                    st.rerun()
                 except Exception as e:
-                    st.error(f"Error processing: {e}")
+                    st.error(f"Error loading lesson file: {e}")
+    else:
+        # 2. MANUAL UPLOAD (ADMIN MODE)
+        st.write("No preloaded lesson found.")
+        pdf_docs = st.file_uploader("Upload PDF", accept_multiple_files=True)
+        if st.button("Process Material"):
+            if not api_key:
+                st.error("Missing API Key.")
+            elif not pdf_docs:
+                st.error("Please upload a PDF.")
+            else:
+                with st.spinner("Processing..."):
+                    try:
+                        process_pdf(pdf_docs)
+                        st.success("Ready!")
+                    except Exception as e:
+                        st.error(f"Error: {e}")
 
 # --- SYSTEM PROMPTS ---
 def get_system_prompt(mode):
     if mode == "Explain":
-        return "You are an expert tutor. Explain simply. Check for understanding."
+        return "You are an expert tutor. Explain the main concepts simply. End with a check for understanding."
     elif mode == "QuizMe":
-        return "You are a quiz tool. Ask a question based on text. Identify misconceptions if wrong."
+        return "You are a quiz master. Immediately ask a diagnostic question based on the text. Do not greet, just ask."
     elif mode == "FixMyWork":
-        return "You are a coach. Critique input. Do NOT rewrite. Point out strengths/weaknesses."
+        return "You are a writing coach. Ask the student to paste their work for review."
     elif mode == "SocraticDialogue":
-        return "You are Socrates. Never give answers. Ask probing questions."
+        return "You are Socrates. Start by asking a deep, probing question about the central theme of the text."
     elif mode == "Vocabulary Builder":
-        return "You are a linguist. Use word in context. Ask student to use it."
+        return "You are a linguist. Select a complex word from the text, define it in context, and ask the student to use it."
     else:
         return "You are a helpful AI assistant."
 
@@ -121,18 +174,27 @@ def get_system_prompt(mode):
 st.title("🎓 Student Learning Hub")
 
 if st.session_state.vector_store is None:
-    st.info("👋 Please ask your teacher to upload the lesson PDF.")
+    st.info("👋 Welcome! Waiting for class material to load...")
 else:
-    # Button Grid
+    st.markdown("<div class='instruction-text'>Select a learning mode below to start automatically:</div>", unsafe_allow_html=True)
+    
+    # AUTOMATED BUTTON GRID
     col1, col2, col3, col4, col5 = st.columns(5)
-    if col1.button("📖 Explain"): st.session_state.mode = "Explain"
-    if col2.button("❓ QuizMe"): st.session_state.mode = "QuizMe"
-    if col3.button("🔧 Fix"): st.session_state.mode = "FixMyWork"
-    if col4.button("🤔 Socratic"): st.session_state.mode = "SocraticDialogue"
-    if col5.button("🗣️ Vocab"): st.session_state.mode = "Vocabulary Builder"
-
-    # Display Current Mode
-    st.markdown(f"**Current Mode: `{st.session_state.mode}`**")
+    
+    if col1.button("📖 Explain"):
+        start_automated_interaction("Explain", "Give a high-level summary of the topic and ask me if I understand.")
+    
+    if col2.button("❓ QuizMe"):
+        start_automated_interaction("QuizMe", "Ask me the first multiple-choice question about this text.")
+        
+    if col3.button("🔧 Fix"):
+        start_automated_interaction("FixMyWork", "Introduce yourself as a coach and ask me to paste my paragraph.")
+        
+    if col4.button("🤔 Socratic"):
+        start_automated_interaction("SocraticDialogue", "Ask me a thought-provoking question to start our discussion.")
+        
+    if col5.button("🗣️ Vocab"):
+        start_automated_interaction("Vocabulary Builder", "Teach me one hard word from this text.")
 
     # Chat History
     for message in st.session_state.chat_history:
@@ -140,7 +202,7 @@ else:
             st.write(message["content"])
 
     # User Input
-    if user_input := st.chat_input("Type response..."):
+    if user_input := st.chat_input("Type your answer here..."):
         if not api_key:
             st.error("No API Key found.")
         else:
@@ -160,16 +222,13 @@ else:
                         f"User: {user_input}"
                     )
                     
-                    # AUTO-DETECT VALID MODEL
                     valid_model = get_working_model_name(api_key)
-                    
                     llm = ChatGoogleGenerativeAI(model=valid_model, google_api_key=api_key)
                     response = llm.invoke(full_prompt)
                     
                     st.session_state.chat_history.append({"role": "assistant", "content": response.content})
                     with st.chat_message("assistant"):
                         st.write(response.content)
-                        
                 except Exception as e:
                     st.error(f"Error: {e}")
 
