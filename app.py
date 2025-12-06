@@ -35,19 +35,32 @@ if "mode" not in st.session_state:
 if "vector_store" not in st.session_state:
     st.session_state.vector_store = None
 
+# --- API KEY MANAGEMENT ---
+# Check if the key is in Streamlit Secrets (Cloud)
+if "GOOGLE_API_KEY" in st.secrets:
+    api_key = st.secrets["GOOGLE_API_KEY"]
+    has_key = True
+else:
+    # Fallback for local testing or if secret is missing
+    api_key = None
+    has_key = False
+
 # --- SIDEBAR ---
 with st.sidebar:
     st.header("Teacher/Admin Portal")
     st.write("Powered by **Google Gemini**")
     
-    # 1. User enters Google API Key here
-    api_key = st.text_input("Enter Google API Key", type="password")
+    # Only show the input box if the Secret Key is missing
+    if not has_key:
+        api_key = st.text_input("Enter Google API Key", type="password")
+    else:
+        st.success("Authentication: ✅ Connected securely")
     
     pdf_docs = st.file_uploader("Upload Course Material (PDF)", accept_multiple_files=True)
     
     if st.button("Process Material"):
         if not api_key:
-            st.error("Please add your Google API Key.")
+            st.error("Missing API Key.")
         elif not pdf_docs:
             st.error("Please upload a PDF.")
         else:
@@ -64,13 +77,13 @@ with st.sidebar:
                     text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
                     text_chunks = text_splitter.split_text(raw_text)
                     
-                    # UPDATED: Using the newer text-embedding-004 model
+                    # Using the modern text-embedding-004 model
                     embeddings = GoogleGenerativeAIEmbeddings(model="models/text-embedding-004", google_api_key=api_key)
                     vectorstore = FAISS.from_texts(texts=text_chunks, embedding=embeddings)
                     st.session_state.vector_store = vectorstore
                     st.success("Material Loaded! Gemini is ready.")
                 except Exception as e:
-                    st.error(f"Error processing material: {e}")
+                    st.error(f"Error: {e}")
 
 # --- SYSTEM PROMPTS ---
 def get_system_prompt(mode):
@@ -109,7 +122,7 @@ else:
     # User Input
     if user_input := st.chat_input("Type your response here..."):
         if not api_key:
-            st.error("Teacher must enter API Key in sidebar.")
+            st.error("Authentication Error: No API Key found.")
         else:
             st.session_state.chat_history.append({"role": "user", "content": user_input})
             with st.chat_message("user"):
