@@ -40,7 +40,9 @@ with st.sidebar:
     st.header("Teacher/Admin Portal")
     st.write("Powered by **Google Gemini**")
     
+    # 1. User enters Google API Key here
     api_key = st.text_input("Enter Google API Key", type="password")
+    
     pdf_docs = st.file_uploader("Upload Course Material (PDF)", accept_multiple_files=True)
     
     if st.button("Process Material"):
@@ -50,21 +52,25 @@ with st.sidebar:
             st.error("Please upload a PDF.")
         else:
             with st.spinner("Processing content..."):
-                raw_text = ""
-                for pdf in pdf_docs:
-                    pdf_reader = PdfReader(pdf)
-                    for page in pdf_reader.pages:
-                        text = page.extract_text()
-                        if text:
-                            raw_text += text
-                
-                text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
-                text_chunks = text_splitter.split_text(raw_text)
-                
-                embeddings = GoogleGenerativeAIEmbeddings(model="models/embedding-001", google_api_key=api_key)
-                vectorstore = FAISS.from_texts(texts=text_chunks, embedding=embeddings)
-                st.session_state.vector_store = vectorstore
-                st.success("Material Loaded! Gemini is ready.")
+                try:
+                    raw_text = ""
+                    for pdf in pdf_docs:
+                        pdf_reader = PdfReader(pdf)
+                        for page in pdf_reader.pages:
+                            text = page.extract_text()
+                            if text:
+                                raw_text += text
+                    
+                    text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
+                    text_chunks = text_splitter.split_text(raw_text)
+                    
+                    # UPDATED: Using the newer text-embedding-004 model
+                    embeddings = GoogleGenerativeAIEmbeddings(model="models/text-embedding-004", google_api_key=api_key)
+                    vectorstore = FAISS.from_texts(texts=text_chunks, embedding=embeddings)
+                    st.session_state.vector_store = vectorstore
+                    st.success("Material Loaded! Gemini is ready.")
+                except Exception as e:
+                    st.error(f"Error processing material: {e}")
 
 # --- SYSTEM PROMPTS ---
 def get_system_prompt(mode):
