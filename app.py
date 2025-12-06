@@ -62,24 +62,21 @@ with st.sidebar:
             st.error("Please upload a PDF.")
         else:
             with st.spinner("Processing..."):
-                try:
-                    raw_text = ""
-                    for pdf in pdf_docs:
-                        pdf_reader = PdfReader(pdf)
-                        for page in pdf_reader.pages:
-                            text = page.extract_text()
-                            if text:
-                                raw_text += text
-                    
-                    text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
-                    text_chunks = text_splitter.split_text(raw_text)
-                    
-                    embeddings = GoogleGenerativeAIEmbeddings(model="models/text-embedding-004", google_api_key=api_key)
-                    vectorstore = FAISS.from_texts(texts=text_chunks, embedding=embeddings)
-                    st.session_state.vector_store = vectorstore
-                    st.success("Gemini is ready!")
-                except Exception as e:
-                    st.error(f"Error: {e}")
+                raw_text = ""
+                for pdf in pdf_docs:
+                    pdf_reader = PdfReader(pdf)
+                    for page in pdf_reader.pages:
+                        text = page.extract_text()
+                        if text:
+                            raw_text += text
+                
+                text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
+                text_chunks = text_splitter.split_text(raw_text)
+                
+                embeddings = GoogleGenerativeAIEmbeddings(model="models/text-embedding-004", google_api_key=api_key)
+                vectorstore = FAISS.from_texts(texts=text_chunks, embedding=embeddings)
+                st.session_state.vector_store = vectorstore
+                st.success("Gemini is ready!")
 
 # --- SYSTEM PROMPTS ---
 def get_system_prompt(mode):
@@ -96,43 +93,4 @@ def get_system_prompt(mode):
 st.title("🎓 Student Learning Hub")
 
 if st.session_state.vector_store is None:
-    st.info("👋 Please ask your teacher to upload the lesson material in the sidebar.")
-else:
-    # Button Grid
-    col1, col2, col3, col4, col5 = st.columns(5)
-    if col1.button("📖 Explain"): st.session_state.mode = "Explain"
-    if col2.button("❓ QuizMe"): st.session_state.mode = "QuizMe"
-    if col3.button("🔧 FixMyWork"): st.session_state.mode = "FixMyWork"
-    if col4.button("🤔 Socratic"): st.session_state.mode = "SocraticDialogue"
-    if col5.button("🗣️ Vocab"): st.session_state.mode = "Vocabulary Builder"
-
-    # Display Current Mode
-    st.markdown(f"**Current Mode: `{st.session_state.mode}`**")
-
-    # Chat History
-    for message in st.session_state.chat_history:
-        with st.chat_message(message["role"]):
-            st.write(message["content"])
-
-    # User Input
-    if user_input := st.chat_input("Type your response here..."):
-        if not api_key:
-            st.error("Authentication Error: No API Key found.")
-        else:
-            st.session_state.chat_history.append({"role": "user", "content": user_input})
-            with st.chat_message("user"):
-                st.write(user_input)
-
-            with st.spinner("Thinking..."):
-                try:
-                    docs = st.session_state.vector_store.similarity_search(user_input, k=3)
-                    context_text = "\n".join([doc.page_content for doc in docs])
-                    persona = get_system_prompt(st.session_state.mode)
-                    
-                    full_prompt = f"System: {persona}\nContext: {context_text}\nUser: {user_input}"
-                    
-                    # Using 'gemini-pro' - the most compatible model alias
-                    llm = ChatGoogleGenerativeAI(model="gemini-pro", google_api_key=api_key)
-                    response = llm.invoke(full_prompt)
-                    
-                    st.session_state.chat_history
+    st.info("👋 Please ask your t
