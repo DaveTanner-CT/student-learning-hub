@@ -1,10 +1,10 @@
 import streamlit as st
-import os
 from PyPDF2 import PdfReader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_community.vectorstores import FAISS
 from langchain_google_genai import GoogleGenerativeAIEmbeddings
 from langchain_google_genai import ChatGoogleGenerativeAI
+import google.generativeai as genai
 
 # --- CONFIGURATION ---
 st.set_page_config(page_title="AI Learning Hub", layout="wide")
@@ -43,6 +43,26 @@ else:
     api_key = None
     has_key = False
 
+# --- HELPER: FIND WORKING MODEL ---
+def get_working_model_name(key):
+    """Asks Google which models are actually available to avoid 404s"""
+    try:
+        genai.configure(api_key=key)
+        # Look for the new Flash model first
+        for m in genai.list_models():
+            if 'generateContent' in m.supported_generation_methods:
+                if 'gemini-1.5-flash' in m.name:
+                    return m.name
+        # Fallback to Pro
+        for m in genai.list_models():
+            if 'generateContent' in m.supported_generation_methods:
+                if 'gemini-pro' in m.name:
+                    return m.name
+    except:
+        pass
+    # Absolute fallback if search fails
+    return "gemini-1.5-flash"
+
 # --- SIDEBAR ---
 with st.sidebar:
     st.header("Teacher Portal")
@@ -62,37 +82,28 @@ with st.sidebar:
             st.error("Please upload a PDF.")
         else:
             with st.spinner("Processing..."):
-                raw_text = ""
-                for pdf in pdf_docs:
-                    pdf_reader = PdfReader(pdf)
-                    for page in pdf_reader.pages:
-                        text = page.extract_text()
-                        if text:
-                            raw_text += text
-                
-                # Split text safely
-                text_splitter = RecursiveCharacterTextSplitter(
-                    chunk_size=1000, 
-                    chunk_overlap=200
-                )
-                text_chunks = text_splitter.split_text(raw_text)
-                
-                # Create embeddings
-                embeddings = GoogleGenerativeAIEmbeddings(
-                    model="models/text-embedding-004", 
-                    google_api_key=api_key
-                )
-                vectorstore = FAISS.from_texts(
-                    texts=text_chunks, 
-                    embedding=embeddings
-                )
-                
-                st.session_state.vector_store = vectorstore
-                st.success("Gemini is ready!")
+                try:
+                    raw_text = ""
+                    for pdf in pdf_docs:
+                        pdf_reader = PdfReader(pdf)
+                        for page in pdf_reader.pages:
+                            text = page.extract_text()
+                            if text:
+                                raw_text += text
+                    
+                    text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
+                    text_chunks = text_splitter.split_text(raw_text)
+                    
+                    # Embeddings usually prefer the 'models/' prefix
+                    embeddings = GoogleGenerativeAIEmbeddings(model="models/text-embedding-004", google_api_key=api_key)
+                    vectorstore = FAISS.from_texts(texts=text_chunks, embedding=embeddings)
+                    st.session_state.vector_store = vectorstore
+                    st.success("Gemini is ready!")
+                except Exception as e:
+                    st.error(f"Error processing: {e}")
 
 # --- SYSTEM PROMPTS ---
 def get_system_prompt(mode):
-    # Short prompts to prevent copy-paste errors
     if mode == "Explain":
         return "You are an expert tutor. Explain simply. Check for understanding."
     elif mode == "QuizMe":
@@ -133,51 +144,48 @@ else:
         if not api_key:
             st.error("No API Key found.")
         else:
-            # 1. Show user message
             st.session_state.chat_history.append({"role": "user", "content": user_input})
             with st.chat_message("user"):
                 st.write(user_input)
 
-            # 2. Generate AI response
             with st.spinner("Thinking..."):
-                docs = st.session_state.vector_store.similarity_search(user_input, k=3)
-                context_text = "\n".join([doc.page_content for doc in docs])
-                persona = get_system_prompt(st.session_state.mode)
-                
-                # Construct prompt safely
-                full_prompt = (
-                    f"System: {persona}\n"
-                    f"Context: {context_text}\n"
-                    f"User: {user_input}"
-                )
-                
-                # Using 'gemini-pro' (The most stable choice)
-                llm = ChatGoogleGenerativeAI(
-                    model="gemini-pro", 
-                    google_api_key=api_key
-                )
-                response = llm.invoke(full_prompt)
-                
-                # 3. Show AI message
-                st.session_state.chat_history.append({"role": "assistant", "content": response.content})
-                with st.chat_message("assistant"):
-                    st.write(response.content)
+                try:
+                    docs = st.session_state.vector_store.similarity_search(user_input, k=3)
+                    context_text = "\n".join([doc.page_content for doc in docs])
+                    persona = get_system_prompt(st.session_state.mode)
+                    
+                    full_prompt = (
+                        f"System: {persona}\n"
+                        f"Context: {context_text}\n"
+                        f"User: {user_input}"
+                    )
+                    
+                    # AUTO-DETECT VALID MODEL
+                    valid_model = get_working_model_name(api_key)
+                    
+                    llm = ChatGoogleGenerativeAI(model=valid_model, google_api_key=api_key)
+                    response = llm.invoke(full_prompt)
+                    
+                    st.session_state.chat_history.append({"role": "assistant", "content": response.content})
+                    with st.chat_message("assistant"):
+                        st.write(response.content)
+                        
+                except Exception as e:
+                    st.error(f"Error: {e}")
 
     # Reporting Section
     st.markdown("---")
     if st.button("📊 Generate Insight Report"):
         if st.session_state.chat_history:
             with st.spinner("Analyzing..."):
-                llm = ChatGoogleGenerativeAI(
-                    model="gemini-pro", 
-                    google_api_key=api_key
-                )
-                report_prompt = (
-                    f"Analyze this chat history for student growth: "
-                    f"{st.session_state.chat_history}"
-                )
-                report = llm.invoke(report_prompt)
-                
-                st.markdown("<div class='report-box'>", unsafe_allow_html=True)
-                st.write(report.content)
-                st.markdown("</div>", unsafe_allow_html=True)
+                try:
+                    valid_model = get_working_model_name(api_key)
+                    llm = ChatGoogleGenerativeAI(model=valid_model, google_api_key=api_key)
+                    report_prompt = f"Analyze this chat history for student growth: {st.session_state.chat_history}"
+                    report = llm.invoke(report_prompt)
+                    
+                    st.markdown("<div class='report-box'>", unsafe_allow_html=True)
+                    st.write(report.content)
+                    st.markdown("</div>", unsafe_allow_html=True)
+                except Exception as e:
+                    st.error(f"Error: {e}")
