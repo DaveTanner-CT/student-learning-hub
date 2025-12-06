@@ -1,6 +1,7 @@
 streamlit
-pypdf
+PyPDF2
 langchain-text-splitters
 langchain-community
 faiss-cpu
+
 langchain-google-genai
