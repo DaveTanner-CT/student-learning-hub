@@ -36,12 +36,10 @@ if "vector_store" not in st.session_state:
     st.session_state.vector_store = None
 
 # --- API KEY MANAGEMENT ---
-# Check if the key is in Streamlit Secrets (Cloud)
 if "GOOGLE_API_KEY" in st.secrets:
     api_key = st.secrets["GOOGLE_API_KEY"]
     has_key = True
 else:
-    # Fallback for local testing or if secret is missing
     api_key = None
     has_key = False
 
@@ -50,7 +48,6 @@ with st.sidebar:
     st.header("Teacher/Admin Portal")
     st.write("Powered by **Google Gemini**")
     
-    # Only show the input box if the Secret Key is missing
     if not has_key:
         api_key = st.text_input("Enter Google API Key", type="password")
     else:
@@ -77,7 +74,7 @@ with st.sidebar:
                     text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
                     text_chunks = text_splitter.split_text(raw_text)
                     
-                    # Using the modern text-embedding-004 model
+                    # Embedding Model
                     embeddings = GoogleGenerativeAIEmbeddings(model="models/text-embedding-004", google_api_key=api_key)
                     vectorstore = FAISS.from_texts(texts=text_chunks, embedding=embeddings)
                     st.session_state.vector_store = vectorstore
@@ -129,25 +126,30 @@ else:
                 st.write(user_input)
 
             with st.spinner("Gemini is thinking..."):
-                docs = st.session_state.vector_store.similarity_search(user_input, k=3)
-                context_text = "\n".join([doc.page_content for doc in docs])
-                persona = get_system_prompt(st.session_state.mode)
-                
-                full_prompt = f"System: {persona}\nContext: {context_text}\nUser: {user_input}"
-                
-                llm = ChatGoogleGenerativeAI(model="gemini-1.5-flash", google_api_key=api_key)
-                response = llm.invoke(full_prompt)
-                
-                st.session_state.chat_history.append({"role": "assistant", "content": response.content})
-                with st.chat_message("assistant"):
-                    st.write(response.content)
+                try:
+                    docs = st.session_state.vector_store.similarity_search(user_input, k=3)
+                    context_text = "\n".join([doc.page_content for doc in docs])
+                    persona = get_system_prompt(st.session_state.mode)
+                    
+                    full_prompt = f"System: {persona}\nContext: {context_text}\nUser: {user_input}"
+                    
+                    # UPDATED: Added "models/" prefix
+                    llm = ChatGoogleGenerativeAI(model="models/gemini-1.5-flash", google_api_key=api_key)
+                    response = llm.invoke(full_prompt)
+                    
+                    st.session_state.chat_history.append({"role": "assistant", "content": response.content})
+                    with st.chat_message("assistant"):
+                        st.write(response.content)
+                except Exception as e:
+                    st.error(f"Error generating response: {e}")
 
     # Reporting Section
     st.markdown("---")
     if st.button("📊 Generate Insight Report"):
         if st.session_state.chat_history:
             with st.spinner("Analyzing..."):
-                llm = ChatGoogleGenerativeAI(model="gemini-1.5-flash", google_api_key=api_key)
+                # UPDATED: Added "models/" prefix
+                llm = ChatGoogleGenerativeAI(model="models/gemini-1.5-flash", google_api_key=api_key)
                 report_prompt = f"Analyze this chat history for student growth/misconceptions: {st.session_state.chat_history}"
                 report = llm.invoke(report_prompt)
                 
