@@ -151,9 +151,9 @@ else:
                     f"User: {user_input}"
                 )
                 
-                # Using the CLEAN name for the Flash model
+                # Using 'gemini-pro' (The most stable choice)
                 llm = ChatGoogleGenerativeAI(
-                    model="gemini-1.5-flash", 
+                    model="gemini-pro", 
                     google_api_key=api_key
                 )
                 response = llm.invoke(full_prompt)
@@ -169,7 +169,7 @@ else:
         if st.session_state.chat_history:
             with st.spinner("Analyzing..."):
                 llm = ChatGoogleGenerativeAI(
-                    model="gemini-1.5-flash", 
+                    model="gemini-pro", 
                     google_api_key=api_key
                 )
                 report_prompt = (
