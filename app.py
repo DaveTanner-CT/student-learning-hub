@@ -133,8 +133,8 @@ else:
                     
                     full_prompt = f"System: {persona}\nContext: {context_text}\nUser: {user_input}"
                     
-                    # UPDATED: Added "models/" prefix
-                    llm = ChatGoogleGenerativeAI(model="models/gemini-1.5-flash", google_api_key=api_key)
+                    # UPDATED: Using "gemini-1.5-pro" which is the most stable identifier
+                    llm = ChatGoogleGenerativeAI(model="gemini-1.5-pro", google_api_key=api_key)
                     response = llm.invoke(full_prompt)
                     
                     st.session_state.chat_history.append({"role": "assistant", "content": response.content})
@@ -148,8 +148,8 @@ else:
     if st.button("📊 Generate Insight Report"):
         if st.session_state.chat_history:
             with st.spinner("Analyzing..."):
-                # UPDATED: Added "models/" prefix
-                llm = ChatGoogleGenerativeAI(model="models/gemini-1.5-flash", google_api_key=api_key)
+                # UPDATED: Using "gemini-1.5-pro"
+                llm = ChatGoogleGenerativeAI(model="gemini-1.5-pro", google_api_key=api_key)
                 report_prompt = f"Analyze this chat history for student growth/misconceptions: {st.session_state.chat_history}"
                 report = llm.invoke(report_prompt)
                 
