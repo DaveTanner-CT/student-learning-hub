@@ -38,8 +38,8 @@ else:
     has_key = False
 
 # --- FORCE FLASH MODEL (High Quota) ---
-# We use the 'latest' alias which is often more reliable for v1beta APIs
-MODEL_NAME = "gemini-1.5-flash-latest"
+# This is the standard, canonical name for the Flash model.
+MODEL_NAME = "gemini-1.5-flash"
 
 # --- SYSTEM PROMPTS ---
 def get_system_prompt(mode):
@@ -94,7 +94,7 @@ def start_automated_interaction(mode_name, initial_instruction):
                 f"Instruction: {initial_instruction}"
             )
             
-            # Using the CLEAN model name (no 'models/' prefix)
+            # Using the CLEAN model name
             llm = ChatGoogleGenerativeAI(model=MODEL_NAME, google_api_key=api_key)
             response = llm.invoke(full_prompt)
             
