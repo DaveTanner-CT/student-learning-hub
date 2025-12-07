@@ -219,7 +219,7 @@ else:
         <div class="tool-card">
             <div class="tool-title">🗣️ Vocabulary Coach</div>
             <div class="tool-desc">
-                Master hard words. Define them, use them in sentences, and get feedback.
+               Identify and practice key vocabulary. Define them, use them in sentences, and get feedback.
             </div>
         </div>
         """, unsafe_allow_html=True)
@@ -309,4 +309,5 @@ else:
                     st.markdown("</div>", unsafe_allow_html=True)
                 except Exception as e:
                     st.error(f"Error: {e}")
+
 
