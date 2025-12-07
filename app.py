@@ -10,7 +10,7 @@ import google.generativeai as genai
 # --- CONFIGURATION ---
 st.set_page_config(page_title="AI Learning Hub", layout="wide")
 
-# --- CSS STYLING (Safe Mode) ---
+# --- CSS STYLING ---
 style = "<style>"
 style += "div.stButton > button { width: 100%; height: 60px; font-size: 18px; font-weight: bold; border-radius: 12px; background-color: #f0f2f6; border: 2px solid #e0e0e0; }"
 style += "div.stButton > button:hover { border-color: #4CAF50; color: #4CAF50; }"
@@ -37,34 +37,37 @@ else:
     api_key = None
     has_key = False
 
-# --- HELPER: ROBUST MODEL SELECTOR (PREVENTS CRASHES) ---
-def get_model_wrapper(api_key):
+# --- DYNAMIC MODEL DISCOVERY (The Fix) ---
+def get_dynamic_model_wrapper(api_key):
     """
-    Tries to use Flash (High Quota). 
-    If it fails (404/Not Found), falls back to Pro (Standard).
-    This prevents the app from crashing.
+    Asks Google API for available models and picks the best one.
+    This prevents 404 errors by using exact names provided by Google.
     """
     try:
-        # 1. Configuration
         genai.configure(api_key=api_key)
+        all_models = list(genai.list_models())
         
-        # 2. Check available models explicitly
-        available_models = [m.name for m in genai.list_models()]
+        # 1. Try to find Flash (Best for speed/quota)
+        for m in all_models:
+            if 'gemini-1.5-flash' in m.name and 'generateContent' in m.supported_generation_methods:
+                # Found it! Return wrapper immediately
+                return ChatGoogleGenerativeAI(model=m.name, google_api_key=api_key)
         
-        # 3. Prefer Flash (1.5) for speed/quota
-        if 'models/gemini-1.5-flash' in available_models:
-            return ChatGoogleGenerativeAI(model="gemini-1.5-flash", google_api_key=api_key)
+        # 2. Try to find Pro (Back up)
+        for m in all_models:
+            if 'gemini-1.5-pro' in m.name and 'generateContent' in m.supported_generation_methods:
+                return ChatGoogleGenerativeAI(model=m.name, google_api_key=api_key)
         
-        # 4. Fallback to Pro (1.5)
-        if 'models/gemini-1.5-pro' in available_models:
-             return ChatGoogleGenerativeAI(model="gemini-1.5-pro", google_api_key=api_key)
-             
+        # 3. Last Resort (Any Gemini)
+        for m in all_models:
+            if 'gemini' in m.name and 'generateContent' in m.supported_generation_methods:
+                return ChatGoogleGenerativeAI(model=m.name, google_api_key=api_key)
+                
     except Exception as e:
-        # Silent failover
+        # If discovery fails, fallback to standard string
         pass
-    
-    # 5. Absolute Fallback (The "Old Reliable" Alias)
-    return ChatGoogleGenerativeAI(model="gemini-pro", google_api_key=api_key)
+        
+    return ChatGoogleGenerativeAI(model="gemini-1.5-flash", google_api_key=api_key)
 
 # --- SYSTEM PROMPTS ---
 def get_system_prompt(mode):
@@ -119,8 +122,8 @@ def start_automated_interaction(mode_name, initial_instruction):
                 f"Instruction: {initial_instruction}"
             )
             
-            # Use the robust selector
-            llm = get_model_wrapper(api_key)
+            # Use Dynamic Discovery
+            llm = get_dynamic_model_wrapper(api_key)
             response = llm.invoke(full_prompt)
             
             st.session_state.chat_history.append({"role": "assistant", "content": response.content})
@@ -265,8 +268,8 @@ else:
                         f"User Input: {user_input}"
                     )
                     
-                    # Robust Model Selector
-                    llm = get_model_wrapper(api_key)
+                    # USE DYNAMIC DISCOVERY
+                    llm = get_dynamic_model_wrapper(api_key)
                     response = llm.invoke(full_prompt)
                     
                     st.session_state.chat_history.append({"role": "assistant", "content": response.content})
@@ -281,7 +284,7 @@ else:
         if st.button("📊 Generate Insight Report"):
             with st.spinner("Analyzing session..."):
                 try:
-                    llm = get_model_wrapper(api_key)
+                    llm = get_dynamic_model_wrapper(api_key)
                     
                     if st.session_state.mode == "Reassessment Practice":
                          report_prompt = (
