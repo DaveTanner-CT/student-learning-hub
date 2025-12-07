@@ -10,8 +10,8 @@ import google.generativeai as genai
 # --- CONFIGURATION ---
 st.set_page_config(page_title="AI Learning Hub", layout="wide")
 
-# --- CSS STYLING (Larger Buttons & Cards) ---
-st.markdown("""
+# --- CSS STYLING (Safe Injection) ---
+custom_css = """
 <style>
     div.stButton > button {
         width: 100%;
@@ -34,7 +34,7 @@ st.markdown("""
         border: 1px solid #e0e0e0;
         box-shadow: 0 4px 6px rgba(0,0,0,0.05);
         margin-bottom: 15px;
-        height: 200px; /* Fixed height for alignment */
+        height: 200px;
     }
     .tool-title {
         font-size: 1.2em;
@@ -55,7 +55,8 @@ st.markdown("""
         border: 2px solid #4CAF50;
     }
 </style>
-""", unsafe_allow_html=True)
+"""
+st.markdown(custom_css, unsafe_allow_html=True)
 
 # --- SESSION STATE ---
 if "chat_history" not in st.session_state:
@@ -77,11 +78,11 @@ else:
 def get_working_model_name(key):
     try:
         genai.configure(api_key=key)
-        # Try Flash first (Fastest)
+        # Try Flash first
         for m in genai.list_models():
             if 'generateContent' in m.supported_generation_methods:
                 if 'gemini-1.5-flash' in m.name: return m.name
-        # Fallback to Pro (Most Stable)
+        # Fallback to Pro
         for m in genai.list_models():
             if 'generateContent' in m.supported_generation_methods:
                 if 'gemini-pro' in m.name: return m.name
@@ -89,55 +90,46 @@ def get_working_model_name(key):
         pass
     return "gemini-pro"
 
-# --- SYSTEM PROMPTS (Your 3 New Modes) ---
+# --- SYSTEM PROMPTS ---
 def get_system_prompt(mode):
     if mode == "Analogy Connector":
         return (
-            "You are a schema-building expert. Your goal is to connect new concepts to the user's existing knowledge.\n"
+            "You are a schema-building expert.\n"
             "RULES:\n"
-            "1. Take a key concept from the provided context and create a clear analogy or real-world connection for it.\n"
-            "2. Present ONLY the analogy/connection first.\n"
-            "3. Immediately ask a follow-up, open-ended question to check the user's comprehension of that specific analogy.\n"
-            "4. Only move to a new concept/analogy after the user confirms understanding."
+            "1. Take a key concept from the context and create a clear analogy.\n"
+            "2. Present ONLY the analogy first.\n"
+            "3. Ask a follow-up question to check comprehension.\n"
+            "4. Only move on after confirmation."
         )
-    
     elif mode == "Vocabulary Coach":
         return (
-            "You are a dedicated vocabulary coach. Your goal is to ensure mastery of challenging terms.\n"
+            "You are a dedicated vocabulary coach.\n"
             "RULES:\n"
-            "1. Start by asking the user to input the specific vocabulary words they want to review (or offer to find difficult words in the text).\n"
-            "2. For each word, define it clearly based on the context, then ask the user to use it in a NEW sentence.\n"
-            "3. If the user struggles or asks for a hint, provide an analogy or an example of the word used in a new, distinct context.\n"
-            "4. Grade their sentence gently and move to the next word."
+            "1. Ask the user for words to review (or offer to pick).\n"
+            "2. Define the word clearly, then ask the user to use it in a NEW sentence.\n"
+            "3. If they struggle, provide an example context."
         )
-    
     elif mode == "Reassessment Practice":
         return (
-            "You are an adaptive tutor focused on remediation. Your goal is to drill the user on specific weak points.\n"
+            "You are an adaptive tutor focused on remediation.\n"
             "RULES:\n"
-            "1. Start by asking if the user wants to provide their known weak areas (concepts or questions they missed).\n"
-            "2. Create targeted quiz questions (One at a time) ONLY on those weak areas. If no weak areas are given, quiz on general main topics.\n"
-            "3. Mix in other concepts from the provided materials to check broad understanding.\n"
-            "4. TRACK PERFORMANCE SILENTLY: Keep a running count of correct vs. incorrect answers in your head.\n"
-            "5. Do NOT give a score until the user explicitly requests the final report.\n"
-            "6. When the user asks for the report, provide:\n"
-            "   - A summary of strengths and weaknesses.\n"
-            "   - A Readiness Score (1-10 scale, where 10 is Expert).\n"
-            "CRITICAL: When grading, ensure you are grading the answer to the QUESTION YOU JUST ASKED. Do not hallucinate other questions."
+            "1. Ask if the user has specific weak areas.\n"
+            "2. Create targeted quiz questions (One at a time).\n"
+            "3. TRACK PERFORMANCE SILENTLY.\n"
+            "4. Do NOT give a score until requested.\n"
+            "5. When grading, ONLY grade the answer to the specific question you just asked."
         )
-    
     else:
         return "You are a helpful AI assistant."
 
-# --- HELPER: START AUTOMATED INTERACTION ---
+# --- HELPER: START INTERACTION ---
 def start_automated_interaction(mode_name, initial_instruction):
     st.session_state.mode = mode_name
     
     if st.session_state.vector_store is None:
-        st.warning("Please wait for the class material to load first.")
+        st.warning("Please wait for material to load.")
         return
 
-    # Clear previous chat history to start fresh with new mode
     st.session_state.chat_history = []
     st.session_state.chat_history.append({"role": "user", "content": f"**[Starting Tool: {mode_name}]**"})
 
@@ -158,7 +150,6 @@ def start_automated_interaction(mode_name, initial_instruction):
             
             st.session_state.chat_history.append({"role": "assistant", "content": response.content})
             st.rerun()
-            
         except Exception as e:
             st.error(f"Error starting interaction: {e}")
 
@@ -179,26 +170,26 @@ def process_pdf(files):
     vectorstore = FAISS.from_texts(texts=text_chunks, embedding=embeddings)
     st.session_state.vector_store = vectorstore
 
-# --- SIDEBAR & PRELOAD LOGIC ---
+# --- SIDEBAR ---
 with st.sidebar:
     st.header("Teacher Dashboard")
     
     if not has_key:
         api_key = st.text_input("Enter Google API Key", type="password")
     
-    preloaded_file_path = "lesson.pdf"
-    is_preloaded = os.path.exists(preloaded_file_path)
+    preloaded_path = "lesson.pdf"
+    is_preloaded = os.path.exists(preloaded_path)
 
     if is_preloaded:
-        st.success(f"📚 Material Loaded: '{preloaded_file_path}'")
+        st.success(f"📚 Material Loaded: '{preloaded_path}'")
         if st.session_state.vector_store is None and api_key:
             with st.spinner("Analyzing text..."):
                 try:
-                    with open(preloaded_file_path, "rb") as f:
+                    with open(preloaded_path, "rb") as f:
                         process_pdf([f])
                     st.rerun()
                 except Exception as e:
-                    st.error(f"Error loading lesson file: {e}")
+                    st.error(f"Error loading file: {e}")
     else:
         st.write("No preloaded lesson found.")
         pdf_docs = st.file_uploader("Upload PDF", accept_multiple_files=True)
@@ -221,7 +212,7 @@ st.title("🎓 Student Learning Hub")
 if st.session_state.vector_store is None:
     st.info("👋 Welcome! Please wait for the lesson material to load.")
 else:
-    # --- 3-COLUMN TOOL LAYOUT ---
+    # 3-COLUMN TOOL LAYOUT
     col1, col2, col3 = st.columns(3)
 
     # Tool A: Analogy
@@ -230,7 +221,7 @@ else:
         <div class="tool-card">
             <div class="tool-title">🔗 Real-World Connect</div>
             <div class="tool-desc">
-                Don't just memorize it—understand it. Connect new ideas to things you already know using analogies.
+                Connect new ideas to things you already know using analogies.
             </div>
         </div>
         """, unsafe_allow_html=True)
@@ -243,7 +234,7 @@ else:
         <div class="tool-card">
             <div class="tool-title">🗣️ Vocabulary Coach</div>
             <div class="tool-desc">
-                Identify hard words and master them. You define them, use them in sentences, and get instant feedback.
+                Identify hard words. Define them, use them in sentences, and get feedback.
             </div>
         </div>
         """, unsafe_allow_html=True)
@@ -256,7 +247,7 @@ else:
         <div class="tool-card">
             <div class="tool-title">📈 Practice & Drill</div>
             <div class="tool-desc">
-                Focus on your weak spots. I'll drill you on what you missed and give you a Readiness Score (1-10).
+                Drill weak spots and get a Readiness Score (1-10) based on performance.
             </div>
         </div>
         """, unsafe_allow_html=True)
@@ -281,7 +272,6 @@ else:
 
             with st.spinner("Thinking..."):
                 try:
-                    # Retrieve context based on the CURRENT question/input
                     docs = st.session_state.vector_store.similarity_search(user_input, k=3)
                     context_text = "\n".join([doc.page_content for doc in docs])
                     
@@ -312,17 +302,16 @@ else:
                     valid_model = get_working_model_name(api_key)
                     llm = ChatGoogleGenerativeAI(model=valid_model, google_api_key=api_key)
                     
-                    # Custom prompt depending on the mode
                     if st.session_state.mode == "Reassessment Practice":
                          report_prompt = (
-                            "Based on the chat history, calculate the student's Readiness Score (1-10).\n"
-                            "Provide a summary of correct vs incorrect answers.\n"
+                            "Calculate the student's Readiness Score (1-10).\n"
+                            "Summarize correct vs incorrect answers.\n"
                             "List Strengths and Weaknesses.\n"
                             f"Chat History: {st.session_state.chat_history}"
                         )
                     else:
                         report_prompt = (
-                            "Analyze the student's learning progress.\n"
+                            "Analyze learning progress.\n"
                             "1. What did they understand well?\n"
                             "2. What concepts need review?\n"
                             "3. Suggested next steps.\n"
@@ -337,4 +326,3 @@ else:
                     st.markdown("</div>", unsafe_allow_html=True)
                 except Exception as e:
                     st.error(f"Error: {e}")
-
