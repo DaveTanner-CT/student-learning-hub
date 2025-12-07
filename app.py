@@ -166,6 +166,13 @@ with st.sidebar:
                 except Exception as e:
                     st.error(f"Error: {e}")
 
+    # RESET BUTTON
+    st.markdown("---")
+    if st.button("🔄 Start Over / New File"):
+        st.session_state.vector_store = None
+        st.session_state.chat_history = []
+        st.rerun()
+
 # --- MAIN APP ---
 st.title("🎓 Student Learning Hub")
 
