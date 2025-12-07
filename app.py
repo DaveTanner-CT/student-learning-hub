@@ -113,23 +113,18 @@ def start_automated_interaction(mode_name, initial_instruction):
         except Exception as e:
             st.error(f"Error: {e}")
 
-# --- FILE PROCESSOR (Expanded for TXT/MD) ---
+# --- FILE PROCESSOR ---
 def process_documents(files):
     raw_text = ""
     for file in files:
         try:
-            # Handle PDF
             if file.name.endswith(".pdf"):
                 pdf_reader = PdfReader(file)
                 for page in pdf_reader.pages:
                     text = page.extract_text()
                     if text: raw_text += text
-            
-            # Handle Text/Markdown
             elif file.name.endswith(".txt") or file.name.endswith(".md"):
-                # Decode bytes to string
                 raw_text += file.getvalue().decode("utf-8")
-                
         except Exception as e:
             st.error(f"Error processing {file.name}: {e}")
             return
@@ -138,16 +133,14 @@ def process_documents(files):
         st.error("Could not extract text. Please try a different file.")
         return
     
-    # Split text into chunks
     text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
     text_chunks = text_splitter.split_text(raw_text)
     
-    # Create Vector Store
     embeddings = GoogleGenerativeAIEmbeddings(model="models/text-embedding-004", google_api_key=api_key)
     vectorstore = FAISS.from_texts(texts=text_chunks, embedding=embeddings)
     st.session_state.vector_store = vectorstore
 
-# --- SIDEBAR (Cleaned Up) ---
+# --- SIDEBAR ---
 with st.sidebar:
     st.header("Upload Materials")
     
@@ -207,17 +200,17 @@ else:
         if st.button("Start Vocab"):
             start_automated_interaction("Vocabulary Coach", "Ask me what words I want to review.")
 
-    # Tool 3: Drill
+    # Tool 3: Assessment
     with col3:
         st.markdown("""
         <div class="tool-card">
-            <div class="tool-title">📈 Practice & Drill</div>
+            <div class="tool-title">📈 Assessment / Re-assessment Practice</div>
             <div class="tool-desc">
                 Drill weak spots and get a Readiness Score (1-10) based on performance.
             </div>
         </div>
         """, unsafe_allow_html=True)
-        if st.button("Start Drill"):
+        if st.button("Start Assessment"):
             start_automated_interaction("Reassessment Practice", "Ask me if I have specific weak areas to practice.")
 
     st.markdown("---")
