@@ -10,7 +10,7 @@ import google.generativeai as genai
 # --- CONFIGURATION ---
 st.set_page_config(page_title="AI Learning Hub", layout="wide")
 
-# --- CSS STYLING (Safe Mode) ---
+# --- CSS STYLING ---
 style = "<style>"
 style += "div.stButton > button { width: 100%; height: 60px; font-size: 18px; font-weight: bold; border-radius: 12px; background-color: #f0f2f6; border: 2px solid #e0e0e0; }"
 style += "div.stButton > button:hover { border-color: #4CAF50; color: #4CAF50; }"
@@ -37,19 +37,10 @@ else:
     api_key = None
     has_key = False
 
-# --- HELPER: FIND MODEL ---
-def get_working_model_name(key):
-    try:
-        genai.configure(api_key=key)
-        for m in genai.list_models():
-            if 'generateContent' in m.supported_generation_methods:
-                if 'gemini-1.5-flash' in m.name: return m.name
-        for m in genai.list_models():
-            if 'generateContent' in m.supported_generation_methods:
-                if 'gemini-pro' in m.name: return m.name
-    except:
-        pass
-    return "gemini-pro"
+# --- FORCE FLASH MODEL (1500 RPM) ---
+# We force the use of 'gemini-1.5-flash' because it has a 1,500/day limit
+# compared to 'gemini-pro' which often has a 50/day limit.
+MODEL_NAME = "models/gemini-1.5-flash"
 
 # --- SYSTEM PROMPTS ---
 def get_system_prompt(mode):
@@ -104,8 +95,7 @@ def start_automated_interaction(mode_name, initial_instruction):
                 f"Instruction: {initial_instruction}"
             )
             
-            valid_model = get_working_model_name(api_key)
-            llm = ChatGoogleGenerativeAI(model=valid_model, google_api_key=api_key)
+            llm = ChatGoogleGenerativeAI(model=MODEL_NAME, google_api_key=api_key)
             response = llm.invoke(full_prompt)
             
             st.session_state.chat_history.append({"role": "assistant", "content": response.content})
@@ -136,6 +126,7 @@ def process_documents(files):
     text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
     text_chunks = text_splitter.split_text(raw_text)
     
+    # Embedding model usually needs text-embedding-004
     embeddings = GoogleGenerativeAIEmbeddings(model="models/text-embedding-004", google_api_key=api_key)
     vectorstore = FAISS.from_texts(texts=text_chunks, embedding=embeddings)
     st.session_state.vector_store = vectorstore
@@ -211,7 +202,7 @@ else:
     with col3:
         st.markdown("""
         <div class="tool-card">
-            <div class="tool-title">📈 Assessment / Re-assessment Practice</div>
+            <div class="tool-title">📈 Assessment Practice</div>
             <div class="tool-desc">
                 Drill weak spots and get a Readiness Score (1-10) based on performance.
             </div>
@@ -249,8 +240,7 @@ else:
                         f"User Input: {user_input}"
                     )
                     
-                    valid_model = get_working_model_name(api_key)
-                    llm = ChatGoogleGenerativeAI(model=valid_model, google_api_key=api_key)
+                    llm = ChatGoogleGenerativeAI(model=MODEL_NAME, google_api_key=api_key)
                     response = llm.invoke(full_prompt)
                     
                     st.session_state.chat_history.append({"role": "assistant", "content": response.content})
@@ -265,8 +255,7 @@ else:
         if st.button("📊 Generate Insight Report"):
             with st.spinner("Analyzing session..."):
                 try:
-                    valid_model = get_working_model_name(api_key)
-                    llm = ChatGoogleGenerativeAI(model=valid_model, google_api_key=api_key)
+                    llm = ChatGoogleGenerativeAI(model=MODEL_NAME, google_api_key=api_key)
                     
                     if st.session_state.mode == "Reassessment Practice":
                          report_prompt = (
