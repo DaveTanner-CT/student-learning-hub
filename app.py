@@ -11,7 +11,6 @@ import google.generativeai as genai
 st.set_page_config(page_title="AI Learning Hub", layout="wide")
 
 # --- CSS STYLING (Safe Mode) ---
-# We use simple string addition to prevent copy-paste syntax errors
 style = "<style>"
 style += "div.stButton > button { width: 100%; height: 60px; font-size: 18px; font-weight: bold; border-radius: 12px; background-color: #f0f2f6; border: 2px solid #e0e0e0; }"
 style += "div.stButton > button:hover { border-color: #4CAF50; color: #4CAF50; }"
@@ -52,7 +51,7 @@ def get_working_model_name(key):
         pass
     return "gemini-pro"
 
-# --- SYSTEM PROMPTS (Your 3 Tools) ---
+# --- SYSTEM PROMPTS ---
 def get_system_prompt(mode):
     if mode == "Analogy Connector":
         return (
@@ -88,10 +87,9 @@ def get_system_prompt(mode):
 def start_automated_interaction(mode_name, initial_instruction):
     st.session_state.mode = mode_name
     if st.session_state.vector_store is None:
-        st.warning("Please wait for class material to load.")
+        st.warning("⚠️ Please upload your study file first!")
         return
 
-    # Clear history for clean start
     st.session_state.chat_history = []
     st.session_state.chat_history.append({"role": "user", "content": f"**[Starting Tool: {mode_name}]**"})
 
@@ -115,61 +113,71 @@ def start_automated_interaction(mode_name, initial_instruction):
         except Exception as e:
             st.error(f"Error: {e}")
 
-# --- PDF PROCESSOR ---
-def process_pdf(files):
+# --- FILE PROCESSOR (Expanded for TXT/MD) ---
+def process_documents(files):
     raw_text = ""
-    for pdf in files:
-        pdf_reader = PdfReader(pdf)
-        for page in pdf_reader.pages:
-            text = page.extract_text()
-            if text:
-                raw_text += text
+    for file in files:
+        try:
+            # Handle PDF
+            if file.name.endswith(".pdf"):
+                pdf_reader = PdfReader(file)
+                for page in pdf_reader.pages:
+                    text = page.extract_text()
+                    if text: raw_text += text
+            
+            # Handle Text/Markdown
+            elif file.name.endswith(".txt") or file.name.endswith(".md"):
+                # Decode bytes to string
+                raw_text += file.getvalue().decode("utf-8")
+                
+        except Exception as e:
+            st.error(f"Error processing {file.name}: {e}")
+            return
+
+    if not raw_text:
+        st.error("Could not extract text. Please try a different file.")
+        return
     
+    # Split text into chunks
     text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
     text_chunks = text_splitter.split_text(raw_text)
     
+    # Create Vector Store
     embeddings = GoogleGenerativeAIEmbeddings(model="models/text-embedding-004", google_api_key=api_key)
     vectorstore = FAISS.from_texts(texts=text_chunks, embedding=embeddings)
     st.session_state.vector_store = vectorstore
 
-# --- SIDEBAR ---
+# --- SIDEBAR (Cleaned Up) ---
 with st.sidebar:
-    st.header("Teacher Dashboard")
+    st.header("Upload Materials")
+    
     if not has_key:
         api_key = st.text_input("Enter Google API Key", type="password")
+        st.markdown("---")
     
-    preloaded_path = "lesson.pdf"
-    if os.path.exists(preloaded_path):
-        st.success(f"📚 Material Loaded: '{preloaded_path}'")
-        if st.session_state.vector_store is None and api_key:
-            with st.spinner("Analyzing..."):
+    st.write("**Step 1:** Upload your study documents.")
+    st.caption("Supported: PDF, TXT, MD")
+    
+    uploaded_files = st.file_uploader("Choose files", accept_multiple_files=True, type=['pdf', 'txt', 'md'])
+    
+    if st.button("Load Study Material"):
+        if not api_key:
+            st.error("Please enter an API Key first.")
+        elif not uploaded_files:
+            st.error("Please select a file to upload.")
+        else:
+            with st.spinner("Reading files..."):
                 try:
-                    with open(preloaded_path, "rb") as f:
-                        process_pdf([f])
-                    st.rerun()
+                    process_documents(uploaded_files)
+                    st.success("✅ Material Loaded! You can now start.")
                 except Exception as e:
-                    st.error(f"Error loading file: {e}")
-    else:
-        st.write("No preloaded lesson found.")
-        pdf_docs = st.file_uploader("Upload PDF", accept_multiple_files=True)
-        if st.button("Process Material"):
-            if not api_key:
-                st.error("Missing API Key.")
-            elif not pdf_docs:
-                st.error("Upload a PDF.")
-            else:
-                with st.spinner("Processing..."):
-                    try:
-                        process_pdf(pdf_docs)
-                        st.success("Ready!")
-                    except Exception as e:
-                        st.error(f"Error: {e}")
+                    st.error(f"Error: {e}")
 
 # --- MAIN APP ---
 st.title("🎓 Student Learning Hub")
 
 if st.session_state.vector_store is None:
-    st.info("👋 Welcome! Please wait for the lesson material to load.")
+    st.info("👈 **Start Here:** Upload your study notes or textbook chapter in the sidebar.")
 else:
     col1, col2, col3 = st.columns(3)
 
@@ -271,7 +279,7 @@ else:
                         report_prompt = (
                             "Analyze progress.\n"
                             "1. What did they understand?\n"
-                            "2. What needs review?\n"
+                            "2. What concepts need review?\n"
                             "3. Next steps.\n"
                             f"History: {st.session_state.chat_history}"
                         )
