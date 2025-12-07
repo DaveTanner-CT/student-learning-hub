@@ -232,7 +232,7 @@ else:
         <div class="tool-card">
             <div class="tool-title">📈 Assessment Practice</div>
             <div class="tool-desc">
-                Drill weak spots and get a Readiness Score (1-10) based on performance.
+                Identify and practice areas needing work; get a Readiness Score (1-10) based on performance.
             </div>
         </div>
         """, unsafe_allow_html=True)
@@ -309,3 +309,4 @@ else:
                     st.markdown("</div>", unsafe_allow_html=True)
                 except Exception as e:
                     st.error(f"Error: {e}")
+
