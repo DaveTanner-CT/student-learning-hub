@@ -37,9 +37,34 @@ else:
     api_key = None
     has_key = False
 
-# --- FORCE FLASH MODEL (High Quota) ---
-# This is the standard, canonical name for the Flash model.
-MODEL_NAME = "gemini-1.5-flash"
+# --- HELPER: ROBUST MODEL SELECTOR (PREVENTS CRASHES) ---
+def get_model_wrapper(api_key):
+    """
+    Tries to use Flash (High Quota). 
+    If it fails (404/Not Found), falls back to Pro (Standard).
+    This prevents the app from crashing.
+    """
+    try:
+        # 1. Configuration
+        genai.configure(api_key=api_key)
+        
+        # 2. Check available models explicitly
+        available_models = [m.name for m in genai.list_models()]
+        
+        # 3. Prefer Flash (1.5) for speed/quota
+        if 'models/gemini-1.5-flash' in available_models:
+            return ChatGoogleGenerativeAI(model="gemini-1.5-flash", google_api_key=api_key)
+        
+        # 4. Fallback to Pro (1.5)
+        if 'models/gemini-1.5-pro' in available_models:
+             return ChatGoogleGenerativeAI(model="gemini-1.5-pro", google_api_key=api_key)
+             
+    except Exception as e:
+        # Silent failover
+        pass
+    
+    # 5. Absolute Fallback (The "Old Reliable" Alias)
+    return ChatGoogleGenerativeAI(model="gemini-pro", google_api_key=api_key)
 
 # --- SYSTEM PROMPTS ---
 def get_system_prompt(mode):
@@ -94,8 +119,8 @@ def start_automated_interaction(mode_name, initial_instruction):
                 f"Instruction: {initial_instruction}"
             )
             
-            # Using the CLEAN model name
-            llm = ChatGoogleGenerativeAI(model=MODEL_NAME, google_api_key=api_key)
+            # Use the robust selector
+            llm = get_model_wrapper(api_key)
             response = llm.invoke(full_prompt)
             
             st.session_state.chat_history.append({"role": "assistant", "content": response.content})
@@ -240,7 +265,8 @@ else:
                         f"User Input: {user_input}"
                     )
                     
-                    llm = ChatGoogleGenerativeAI(model=MODEL_NAME, google_api_key=api_key)
+                    # Robust Model Selector
+                    llm = get_model_wrapper(api_key)
                     response = llm.invoke(full_prompt)
                     
                     st.session_state.chat_history.append({"role": "assistant", "content": response.content})
@@ -255,7 +281,7 @@ else:
         if st.button("📊 Generate Insight Report"):
             with st.spinner("Analyzing session..."):
                 try:
-                    llm = ChatGoogleGenerativeAI(model=MODEL_NAME, google_api_key=api_key)
+                    llm = get_model_wrapper(api_key)
                     
                     if st.session_state.mode == "Reassessment Practice":
                          report_prompt = (
