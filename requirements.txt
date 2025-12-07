@@ -3,5 +3,5 @@ PyPDF2
 langchain-text-splitters
 langchain-community
 faiss-cpu
-langchain-google-genai>=1.0.7
-google-generativeai>=0.7.0
+langchain-google-genai>=1.0.9
+google-generativeai>=0.7.2
